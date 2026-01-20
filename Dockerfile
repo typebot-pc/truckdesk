@@ -12,10 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante do projeto
 COPY . .
 
+HEALTHCHECK NONE
+
 # Expõe a porta (FastAPI)
 EXPOSE 5000
-
-HEALTHCHECK NONE
 
 # Comando para rodar a aplicação
 #CMD ["sh", "-c", "echo 'Container iniciado' && sleep infinity"]
