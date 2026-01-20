@@ -199,29 +199,34 @@ async def webhook(request: Request):
         await send_message(remoteJid, f'{periodo_do_dia}, {nome_usuario}!')
 
         # ----------------------------------
-        cpf = message
-
-        usuario = await verificar_usuario(cpf)
-
-        if not usuario:
-            await send_message(remoteJid, "❌ Erro ao verificar seu cadastro.")
-            return await status_ok()
-
-        if not usuario.get("exists"):
-            await send_message(remoteJid, "❌ Você não possui cadastro.")
-            return await status_ok()
-
-        if not usuario.get("authorized"):
-            await send_message(remoteJid, "⛔ Seu acesso não está autorizado.")
-            return await status_ok()
-
-        if usuario.get("account-status") != "active":
-            await send_message(remoteJid, "⚠️ Sua conta não está ativa.")
-            return await status_ok()
-
-        # Tudo OK → chama assistant
+        # cpf = message
+        #
+        # usuario = await verificar_usuario(cpf)
+        #
+        # if not usuario:
+        #     await send_message(remoteJid, "❌ Erro ao verificar seu cadastro.")
+        #     return await status_ok()
+        #
+        # if not usuario.get("exists"):
+        #     await send_message(remoteJid, "❌ Você não possui cadastro.")
+        #     return await status_ok()
+        #
+        # if not usuario.get("authorized"):
+        #     await send_message(remoteJid, "⛔ Seu acesso não está autorizado.")
+        #     return await status_ok()
+        #
+        # if usuario.get("account-status") != "active":
+        #     await send_message(remoteJid, "⚠️ Sua conta não está ativa.")
+        #     return await status_ok()
+        #
+        # # Tudo OK → chama assistant
+        # await chamar_assistant(
+        #     cpf=cpf,
+        #     phone=phone_number,
+        #     message=message
+        # )
         await chamar_assistant(
-            cpf=cpf,
+            cpf='07903292986',
             phone=phone_number,
             message=message
         )
