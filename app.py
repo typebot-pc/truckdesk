@@ -2,10 +2,9 @@ import os
 import uvicorn
 import httpx
 from fastapi import FastAPI, Request
-
-
-
-# app = FastAPI()
+from fastapi.responses import JSONResponse
+import pytz
+from datetime import datetime
 
 
 
@@ -35,6 +34,29 @@ app = FastAPI(lifespan=lifespan)
 # Cliente HTTP reutilizável
 # =====================================
 http_client = httpx.AsyncClient(timeout=30)
+
+
+
+# Função para retornar Status OK da solicitação
+async def status_ok():
+    return JSONResponse(content={"status": "OK"}, status_code=200)
+
+
+
+# Função para retornar o período do dia
+async def obter_periodo_do_dia():
+    # Define o fuso horário de Brasília
+    br_tz = pytz.timezone('America/Sao_Paulo')
+
+    # Obtém a hora atual
+    hora_atual = datetime.now(br_tz).hour
+
+    if 5 <= hora_atual < 12:
+        return "Bom dia"
+    elif 12 <= hora_atual < 18:
+        return "Boa tarde"
+    else:
+        return "Boa noite"
 
 
 
@@ -77,3 +99,33 @@ def health():
 @app.get("/teste")
 async def teste():
     await send_message(remoteJid, texto)
+
+
+
+# Rota do webhook
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+
+    if not data or 'data' not in data or 'key' not in data['data'] or 'remoteJid' not in data['data']['key'] or 'message' not in data['data']:
+        print(f'ERRO WEBHOOK INVÁLIDO')
+        return await status_ok()
+
+    # Captura as variáveis
+    remoteJid = data['data']['key']['remoteJid']
+    phone_number = remoteJid.split('@')[0]
+    messageType = data['data']['messageType']
+    messageID = data['data']['key']['id']
+    nome_usuario = data['data']['pushName']
+
+    # ENCERRA SE FOR UM GRUPO
+    if "@g.us" in remoteJid:
+        return await status_ok()
+
+    # [SE FOR UM TEXTO]
+    if messageType == 'conversation':
+        message = data['data']['message'].get('conversation', '')
+        print(f"{phone_number} - {messageType} - Mensagem: {message}")
+
+        periodo_do_dia = await obter_periodo_do_dia()
+        await send_message(remoteJid, f'{periodo_do_dia}, {nome_usuario}!')
