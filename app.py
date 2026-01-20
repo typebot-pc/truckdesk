@@ -1,10 +1,13 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
+import os
 
 app = FastAPI()
 
-@app.get("/", include_in_schema=False)
+PORT = int(os.environ.get("PORT", 5000))
+
+@app.get("/")
 def root():
-    return Response(content="OK", media_type="text/plain")
+    return "OK"
 
 @app.get("/health")
 def health():
