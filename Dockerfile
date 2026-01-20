@@ -15,6 +15,8 @@ COPY . .
 # Expõe a porta (FastAPI)
 EXPOSE 5000
 
+HEALTHCHECK NONE
+
 # Comando para rodar a aplicação
 #CMD ["sh", "-c", "echo 'Container iniciado' && sleep infinity"]
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
