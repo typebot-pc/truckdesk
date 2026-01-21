@@ -81,7 +81,7 @@ async def obter_periodo_do_dia():
 # DATABASE
 # =====================================
 #DATABASE_URL = 'postgres://usuario:123456@easypanel.monitoramento.qzz.io:6000/db-truckdesk?sslmode=disable'
-DATABASE_URL = 'postgres://usuario:123456@127.0.0.1:5432/db-truckdesk'
+DATABASE_URL = 'postgres://usuario:123456@scripts_db-truckdesk:5432/db-truckdesk?sslmode=disable'
 
 pool: Optional[asyncpg.Pool] = None
 
