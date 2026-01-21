@@ -92,16 +92,16 @@ async def init_db():
     )
 
     async with pool.acquire() as conn:
+        await conn.execute("SET TIME ZONE 'America/Sao_Paulo';")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS whatsapp_users (
                 phone VARCHAR(20) PRIMARY KEY,
                 cpf VARCHAR(14) NOT NULL,
                 status VARCHAR(20) NOT NULL DEFAULT 'ativo',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
             );
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS whatsapp_user_events (
                 id SERIAL PRIMARY KEY,
@@ -109,7 +109,7 @@ async def init_db():
                 action VARCHAR(20) NOT NULL,
                 status VARCHAR(20),
                 source VARCHAR(50) DEFAULT 'lovable',
-                created_at TIMESTAMP DEFAULT NOW()
+                created_at TIMESTAMPTZ DEFAULT NOW()
             );
         """)
 
@@ -460,7 +460,7 @@ async def webhook(request: Request):
     # # [SE FOR UM ÁUDIO]
     # # No momento só aceita se o usuário falar o número da opção
     # elif messageType == 'audioMessage':
-        
+
     # [SE FOR UM TEXTO]
     if messageType == 'conversation':
         message = data['data']['message'].get('conversation', '')
@@ -533,7 +533,7 @@ async def webhook(request: Request):
                 phone=phone_number,
                 cpf=dados_para_verificacao["cpf"]
             )
-            
+
             # Feedback inicial
             await send_message(remoteJid, "✅ Número cadastrado com sucesso")
             await chamar_assistant(
