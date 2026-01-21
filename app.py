@@ -82,7 +82,6 @@ async def obter_periodo_do_dia():
 # =====================================
 #DATABASE_URL = 'postgres://usuario:123456@easypanel.monitoramento.qzz.io:6000/db-truckdesk?sslmode=disable'
 DATABASE_URL = 'postgres://usuario:123456@scripts_db-truckdesk:5432/db-truckdesk?sslmode=disable'
-
 pool: Optional[asyncpg.Pool] = None
 
 async def init_db():
@@ -103,8 +102,6 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT NOW()
             );
         """)
-
-
 
 async def get_user_by_phone(phone: str):
     async with pool.acquire() as conn:
@@ -143,6 +140,16 @@ async def update_user_status(phone: str, status: str):
             """,
             phone,
             status
+        )
+
+async def delete_user_by_phone(phone: str):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            DELETE FROM whatsapp_users
+            WHERE phone = $1
+            """,
+            phone
         )
 
 
@@ -268,13 +275,29 @@ async def teste():
 
 
 
-@app.post("/lovable/user-status") #Lovable chama isso quando: plano vence / acesso é revogado / usuário é bloqueado
+@app.post("/atualizarUserStatus") #Lovable chama isso quando: plano vence / acesso é revogado / usuário é bloqueado
 async def lovable_user_status(payload: dict):
-    phone = payload["phone"]
-    status = payload["status"]  # ativo | inativo | vencido
+    phone = payload.get("phone")
+    action = payload.get("action")
 
-    await update_user_status(phone, status)
-    return {"ok": True}
+    if not phone or not action:
+        return {"ok": False, "error": "phone e action são obrigatórios"}
+
+    if action == "update":
+        status = payload.get("status")
+
+        if not status:
+            return {"ok": False, "error": "status é obrigatório para update"}
+
+        await update_user_status(phone, status)
+        return {"ok": True, "action": "update", "status": status}
+
+    elif action == "delete":
+        await delete_user_by_phone(phone)
+        return {"ok": True, "action": "delete"}
+
+    else:
+        return {"ok": False, "error": "action inválida"}
 
 
 
@@ -325,16 +348,21 @@ async def webhook(request: Request):
 
         usuario_db = await get_user_by_phone(phone_number)
         if usuario_db:
-            if usuario_db["status"] != "ativo":
-                await send_message(remoteJid,"⚠️ Sua conta não está ativa.\n\nRegularize No app:\nhttps://road-cost-tracker.lovable.app/")
+            if usuario_db["status"] == "vencido":
+                await send_message(remoteJid,"⚠️ Sua assinatura venceu.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
                 return await status_ok()
 
-            await chamar_assistant(
-                cpf=usuario_db["cpf"],
-                phone=phone_number,
-                message=message
-            )
-            return await status_ok()
+            if usuario_db["status"] == "ativo":
+                await chamar_assistant(
+                    cpf=usuario_db["cpf"],
+                    phone=phone_number,
+                    message=message
+                )
+                return await status_ok()
+
+            else:
+                await send_message(remoteJid,"⚠️ Sua conta não está ativa.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
+                return await status_ok()
 
         # Pula a etapa de verificação se o usuário já possui o número cadastrado
         # if phone_number in lista_cadastrados:
@@ -359,6 +387,7 @@ async def webhook(request: Request):
             return await status_ok()
 
         # Mensagem válida
+        # TODO = Fazer com que haja um bloqueio caso tenham muitas solicitações erradas para não sobrecarregar o endpoint do Lovable
         if isinstance(resultado, dict) and resultado.get("status") == "ok":
             dados_para_verificacao = resultado["dados"]
             usuario = await verificar_usuario(dados_para_verificacao)
@@ -382,9 +411,9 @@ async def webhook(request: Request):
                 await send_message(remoteJid, "⚠️ Sua conta não está ativa.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
                 return await status_ok()
 
-            if usuario.get("token") != dados_para_verificacao.get("codigo"):
-                await send_message(remoteJid, "⚠️ Código expirado.\n\nGere um novo pelo app:\nhttps://road-cost-tracker.lovable.app/")
-                return await status_ok()
+            # if usuario.get("token") != dados_para_verificacao.get("codigo"):
+            #     await send_message(remoteJid, "⚠️ Código expirado.\n\nGere um novo pelo app:\nhttps://road-cost-tracker.lovable.app/")
+            #     return await status_ok()
 
             #lista_cadastrados[phone_number] = dados_para_verificacao["cpf"]
             await upsert_whatsapp_user(
@@ -399,6 +428,7 @@ async def webhook(request: Request):
                 message="Me dê boas vindas"
             )
             return await status_ok()
+
 
         # Mensagem comum (usuário ainda não cadastrado)
         await send_message(remoteJid,
