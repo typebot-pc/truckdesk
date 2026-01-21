@@ -185,7 +185,7 @@ async def log_user_event(
 
 
 # =====================================
-# Enviar mensagem (Evolution)
+# Evolution API
 # =====================================
 async def send_message(remoteJid: str, text: str) -> None:
     url = f"{baseUrl}/message/sendText/{instance}"
@@ -203,6 +203,34 @@ async def send_message(remoteJid: str, text: str) -> None:
 
     if response.status_code not in (200, 201):
         print(f"Falha ao enviar a mensagem para {remoteJid}: {response.status_code} - {response.text}")
+
+
+
+# Função para retornar o base64 da mensagem na Evolution API v2
+async def getBase64FromMediaMessage(remoteJid: str, messageID: str) -> None:
+    # URL e header
+    url = f"{baseUrl}/chat/getBase64FromMediaMessage/{instance}"
+    headers = {
+        "apikey": apikey,
+        "Content-Type": "application/json"
+    }
+
+    # Body
+    body = {
+        "message": {"key": {"id": messageID}}
+    }
+
+    # Retorna o base64
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=body, headers=headers)
+
+    if response.status_code in (200, 201):
+        import json
+        data = json.loads(response.text)
+        base64 = data.get("base64")
+        return base64
+    else:
+        return False
 
 
 
@@ -226,17 +254,24 @@ async def verificar_usuario(dados: dict) -> Optional[dict]:
 
 
 
-async def chamar_assistant(cpf: str, phone: str, message: str):
+async def chamar_assistant(cpf: str, phone: str, message: str, audio: bool = False):
     url = "https://xghkaptoxkjdypiruinm.supabase.co/functions/v1/external-assistant"
     headers = {
         "Content-Type": "application/json"
     }
+
     payload = {
         "cpf": cpf,
         "phone": phone,
-        "message": message,
         "callback_url": "https://chatbot.monitoramento.qzz.io/enviarResposta"
     }
+
+    # Decide automaticamente que tipo de mensagem é
+    if audio:
+        payload["audio_base64"] = message
+    else:
+        payload["message"] = message
+
     try:
         response = await http_client.post(url, json=payload, headers=headers)
         if response.status_code not in (200, 201):
@@ -457,9 +492,34 @@ async def webhook(request: Request):
     if "@g.us" in remoteJid:
         return await status_ok()
 
-    # # [SE FOR UM ÁUDIO]
-    # # No momento só aceita se o usuário falar o número da opção
-    # elif messageType == 'audioMessage':
+    # [SE FOR UM ÁUDIO]
+    if messageType == 'audioMessage':
+        message = await getBase64FromMediaMessage(remoteJid, messageID)
+        print(f"{phone_number} - {messageType} - Mensagem: {message}")
+        if not message:
+            await send_message(remoteJid, "Desculpe, houve um erro interno e não consegui ouvir seu áudio.\nTente novamente por favor.")
+            return await status_ok()
+
+        # Verifica na database localhost se número existe e qual seu status
+        usuario_db = await get_user_by_phone(phone_number)
+        if usuario_db:
+            if usuario_db["status"] == "vencido":
+                await send_message(remoteJid, "⚠️ Sua assinatura venceu.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
+                return await status_ok()
+
+            if usuario_db["status"] == "ativo":
+                await chamar_assistant(
+                    cpf=usuario_db["cpf"],
+                    phone=phone_number,
+                    message=message,
+                    audio=True
+                )
+                return await status_ok()
+
+            else:
+                await send_message(remoteJid, "⚠️ Sua conta não está ativa.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
+                return await status_ok()
+
 
     # [SE FOR UM TEXTO]
     if messageType == 'conversation':
