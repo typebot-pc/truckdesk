@@ -2,13 +2,12 @@ import os
 import re
 import uvicorn
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse
 import pytz
 from datetime import datetime
 from typing import Optional
 import asyncpg
-
 
 
 
@@ -103,6 +102,17 @@ async def init_db():
             );
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS whatsapp_user_events (
+                id SERIAL PRIMARY KEY,
+                phone VARCHAR(20),
+                action VARCHAR(20) NOT NULL,
+                status VARCHAR(20),
+                source VARCHAR(50) DEFAULT 'lovable',
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+
 async def get_user_by_phone(phone: str):
     async with pool.acquire() as conn:
         return await conn.fetchrow(
@@ -130,9 +140,9 @@ async def upsert_whatsapp_user(phone: str, cpf: str):
             cpf
         )
 
-async def update_user_status(phone: str, status: str):
+async def update_user_status(phone: str, status: str) -> bool:
     async with pool.acquire() as conn:
-        await conn.execute(
+        result = await conn.execute(
             """
             UPDATE whatsapp_users
             SET status = $2, updated_at = NOW()
@@ -141,15 +151,35 @@ async def update_user_status(phone: str, status: str):
             phone,
             status
         )
+    return result.endswith("1")
 
-async def delete_user_by_phone(phone: str):
+async def delete_user_by_phone(phone: str) -> bool:
     async with pool.acquire() as conn:
-        await conn.execute(
+        result = await conn.execute(
             """
             DELETE FROM whatsapp_users
             WHERE phone = $1
             """,
             phone
+        )
+    return result.endswith("1")
+
+async def log_user_event(
+    phone: str,
+    action: str,
+    status: Optional[str] = None,
+    source: str = "lovable"
+):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO whatsapp_user_events (phone, action, status, source)
+            VALUES ($1, $2, $3, $4)
+            """,
+            phone,
+            action,
+            status,
+            source
         )
 
 
@@ -275,29 +305,115 @@ async def teste():
 
 
 
+@app.get("/whatsapp_users", response_class=HTMLResponse)
+async def debug_whatsapp_users():
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT phone, cpf, status, created_at FROM whatsapp_users ORDER BY created_at DESC"
+        )
+
+    html = """
+    <html><body>
+    <h2>WhatsApp Users</h2>
+    <table border="1" cellpadding="5">
+        <tr>
+            <th>Phone</th><th>CPF</th><th>Status</th><th>Created</th>
+        </tr>
+    """
+
+    for r in rows:
+        html += f"""
+        <tr>
+            <td>{r['phone']}</td>
+            <td>{r['cpf']}</td>
+            <td>{r['status']}</td>
+            <td>{r['created_at']}</td>
+        </tr>
+        """
+
+    html += "</table></body></html>"
+    return html
+
+
+
+@app.get("/whatsapp_user_events", response_class=HTMLResponse)
+async def debug_whatsapp_user_events():
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT phone, action, status, source, created_at
+            FROM whatsapp_user_events
+            ORDER BY created_at DESC
+            LIMIT 200
+            """
+        )
+
+    html = """
+    <html><body>
+    <h2>WhatsApp User Events</h2>
+    <table border="1" cellpadding="5">
+        <tr>
+            <th>Phone</th><th>Action</th><th>Status</th><th>Source</th><th>Date</th>
+        </tr>
+    """
+
+    for r in rows:
+        html += f"""
+        <tr>
+            <td>{r['phone']}</td>
+            <td>{r['action']}</td>
+            <td>{r['status'] or '-'}</td>
+            <td>{r['source']}</td>
+            <td>{r['created_at']}</td>
+        </tr>
+        """
+
+    html += "</table></body></html>"
+    return html
+
+
+
 @app.post("/atualizarUserStatus") #Lovable chama isso quando: plano vence / acesso é revogado / usuário é bloqueado
 async def lovable_user_status(payload: dict):
     phone = payload.get("phone")
     action = payload.get("action")
 
+    # Se payload veio errado
     if not phone or not action:
-        return {"ok": False, "error": "phone e action são obrigatórios"}
+        await log_user_event(phone, "error")
+        raise HTTPException(400, "phone e action são obrigatórios")
 
+    # Se pedido para atualizar
     if action == "update":
         status = payload.get("status")
-
         if not status:
-            return {"ok": False, "error": "status é obrigatório para update"}
+            await log_user_event(phone, "error")
+            raise HTTPException(400, "status é obrigatório para update")
 
-        await update_user_status(phone, status)
-        return {"ok": True, "action": "update", "status": status}
+        updated = await update_user_status(phone, status)
 
+        if not updated:
+            await log_user_event(phone, "update_failed", status)
+            raise HTTPException(404, "usuário não encontrado")
+
+        await log_user_event(phone, "update", status)
+        return {"ok": True}
+
+    # Se pedido para deletar
     elif action == "delete":
-        await delete_user_by_phone(phone)
-        return {"ok": True, "action": "delete"}
+        deleted = await delete_user_by_phone(phone)
 
+        if not deleted:
+            await log_user_event(phone, "delete_failed")
+            raise HTTPException(404, "usuário não encontrado")
+
+        await log_user_event(phone, "delete")
+        return {"ok": True}
+
+    # Se pedido solicitou uma "action" invalida
     else:
-        return {"ok": False, "error": "action inválida"}
+        await log_user_event(phone, "error")
+        raise HTTPException(400, "action inválida")
 
 
 
@@ -341,11 +457,16 @@ async def webhook(request: Request):
     if "@g.us" in remoteJid:
         return await status_ok()
 
+    # # [SE FOR UM ÁUDIO]
+    # # No momento só aceita se o usuário falar o número da opção
+    # elif messageType == 'audioMessage':
+        
     # [SE FOR UM TEXTO]
     if messageType == 'conversation':
         message = data['data']['message'].get('conversation', '')
         print(f"{phone_number} - {messageType} - Mensagem: {message}")
 
+        # Verifica na database localhost se número existe e qual seu status
         usuario_db = await get_user_by_phone(phone_number)
         if usuario_db:
             if usuario_db["status"] == "vencido":
@@ -364,14 +485,6 @@ async def webhook(request: Request):
                 await send_message(remoteJid,"⚠️ Sua conta não está ativa.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
                 return await status_ok()
 
-        # Pula a etapa de verificação se o usuário já possui o número cadastrado
-        # if phone_number in lista_cadastrados:
-        #     await chamar_assistant(
-        #         cpf=lista_cadastrados[phone_number],
-        #         phone=phone_number,
-        #         message=message
-        #     )
-        #     return await status_ok()
 
         # Caso não tenha o número cadastrado, verifica a mensagem recebida
         # Tenta extrair a mensagem padrão que virá pelo app
@@ -415,12 +528,13 @@ async def webhook(request: Request):
             #     await send_message(remoteJid, "⚠️ Código expirado.\n\nGere um novo pelo app:\nhttps://road-cost-tracker.lovable.app/")
             #     return await status_ok()
 
-            #lista_cadastrados[phone_number] = dados_para_verificacao["cpf"]
+            # Caso esteja tudo certo na validação, irá cadastrar na database localhost
             await upsert_whatsapp_user(
                 phone=phone_number,
                 cpf=dados_para_verificacao["cpf"]
             )
-
+            
+            # Feedback inicial
             await send_message(remoteJid, "✅ Número cadastrado com sucesso")
             await chamar_assistant(
                 cpf=dados_para_verificacao["cpf"],
