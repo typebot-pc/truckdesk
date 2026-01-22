@@ -525,7 +525,7 @@ async def webhook(request: Request):
     messageID = data['data']['key']['id']
     nome_usuario = data['data']['pushName']
     is_audio = False
-    
+
 
     # RETORNA SE FOR UM GRUPO
     if "@g.us" in remoteJid:
@@ -609,9 +609,9 @@ async def webhook(request: Request):
             await send_message(remoteJid, "⚠️ Sua conta não está ativa.\n\nPor favor, regularize no app:\nhttps://road-cost-tracker.lovable.app/")
             return await status_ok()
 
-        # if usuario.get("token") != dados_para_verificacao.get("codigo"):
-        #     await send_message(remoteJid, "⚠️ Código expirado.\n\nPor favor, gere um novo token pelo app:\nhttps://road-cost-tracker.lovable.app/")
-        #     return await status_ok()
+        if usuario.get("token") != dados_para_verificacao.get("codigo"):
+            await send_message(remoteJid, "⚠️ Código expirado.\n\nPor favor, gere um novo token pelo app:\nhttps://road-cost-tracker.lovable.app/")
+            return await status_ok()
 
         # Caso esteja tudo certo na validação, irá cadastrar na database da API (localhost)
         await upsert_whatsapp_user(
