@@ -235,13 +235,13 @@ async def getBase64FromMediaMessage(remoteJid: str, messageID: str) -> None:
 async def verificar_usuario(dados: dict) -> Optional[dict]:
     url = "https://xghkaptoxkjdypiruinm.supabase.co/functions/v1/verify-user"
     headers = {"Content-Type": "application/json"}
-    #payload = dados
-    cpf = dados.get("cpf")
-    if not cpf:
-        return None
-    payload = {
-        "cpf": cpf
-    }
+    payload = dados
+    # cpf = dados.get("cpf")
+    # if not cpf:
+    #     return None
+    # payload = {
+    #     "cpf": cpf
+    # }
     try:
         response = await http_client.post(url, json=payload, headers=headers)
         if response.status_code != 200:
@@ -337,7 +337,8 @@ def verificar_mensagem_cadastro(message: str, phone_number: str):
                 "dados": {
                     "cpf": cpf,
                     "codigo": codigo,
-                    "telefone": phone_number
+                    "telefone": phone_number,
+                    "mark_used": codigo
                 }
             }
 
@@ -595,7 +596,7 @@ async def webhook(request: Request):
     if isinstance(resultado, dict) and resultado.get("status") == "ok":
         dados_para_verificacao = resultado["dados"]
         usuario = await verificar_usuario(dados_para_verificacao)
-        print(usuario)
+        #print(usuario)
         #usuario = {'exists': True, 'authorized': True, 'account_status': 'ativo', 'plan_type': 'trial', 'nome': 'Luis Gustavo Lopes da Silveira', 'user_id': 'ee5cc143-c2c4-4576-8b3b-341276d82535', 'message': 'Usuário autorizado'}
         #usuario = {'exists': True, 'authorized': True, 'account_status': 'ativo', 'plan_type': 'trial', 'nome': 'Luis Gustavo Lopes da Silveira', 'user_id': 'ee5cc143-c2c4-4576-8b3b-341276d82535', 'message': 'Usuário autorizado', 'token': '6110a417-ef59-42f3-8d36-b8b8818338b7'}
         #usuario["token"] = "6110a417-ef59-42f3-8d36-b8b8818338b7"
