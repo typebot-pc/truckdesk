@@ -211,8 +211,8 @@ async def send_composing(remoteJid: str) -> None:
         "delay": 40000,
         "presence": "composing"
     }
-    response = await http_client.post(url, json=body, headers=headers)
     await send_message(remoteJid, '[DEBUG] send_composing')
+    response = await http_client.post(url, json=body, headers=headers)
     if response.status_code not in (200, 201):
         print(f"Falha ao enviar 'send_composing' {remoteJid}: {response.status_code} - {response.text}")
 
@@ -552,12 +552,13 @@ async def enviarResposta(request: Request):
 
     remoteJid = f"{phone}@s.whatsapp.net"
 
+    await send_message(remoteJid, response_text)
+
     # Cancela o "Digitando..."
     task = composing_tasks.pop(remoteJid, None)
     if task:
         task.cancel()
-
-    await send_message(remoteJid, response_text)
+        
     return {"status": "ok"}
 
 
