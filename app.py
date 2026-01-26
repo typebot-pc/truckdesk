@@ -208,7 +208,7 @@ async def send_composing(remoteJid: str) -> None:
     }
     body = {
         "number": remoteJid,
-        "delay": 5000,
+        "delay": 6000,
         "presence": "composing"
     }
     response = await http_client.post(url, json=body, headers=headers)
@@ -273,6 +273,9 @@ async def verificar_usuario(dados: dict) -> Optional[dict]:
 async def chamar_assistant(cpf: str, phone: str, message: str, audio: bool = False):
     # Chama a task que envia "Digitando..." e evita duplicá-la
     remoteJid = f"{phone}@s.whatsapp.net"
+    task = composing_tasks.pop(remoteJid, None)
+    if task and not task.done():
+        task.cancel()
     if remoteJid not in composing_tasks:
         task = asyncio.create_task(composing_loop(remoteJid))
         composing_tasks[remoteJid] = task
@@ -335,7 +338,7 @@ async def composing_loop(remoteJid: str, timeout=40):
             if asyncio.get_event_loop().time() - start > timeout:
                 break
             await send_composing(remoteJid)
-            await asyncio.sleep(4)
+            await asyncio.sleep(3)
     except asyncio.CancelledError:
         pass
 
@@ -609,10 +612,6 @@ async def webhook(request: Request):
             return await status_ok()
 
         if usuario_db["status"] == "ativo":
-            task = composing_tasks.pop(remoteJid, None)
-            if task:
-                task.cancel()
-
             await chamar_assistant(
                 cpf=usuario_db["cpf"],
                 phone=phone_number,
