@@ -16,7 +16,7 @@ from typing import Optional
 baseUrl = 'https://evolution.monitoramento.qzz.io'
 apikey = 'F9AB68BD21E5-4B2B-BFEA-0AE010D4E894'
 instance = 'chatbot'
-remoteJid = '554198498763@s.whatsapp.net'
+#remoteJid = '554198498763@s.whatsapp.net'
 
 
 
@@ -417,7 +417,7 @@ def health():
 # Endpoint para testar o envio das mensagens
 @app.get("/teste")
 async def teste():
-    await send_message(remoteJid, 'Mensagem de teste')
+    await send_message('554198498763@s.whatsapp.net', 'Mensagem de teste')
 
 
 
@@ -742,6 +742,11 @@ if __name__ == '__main__':
 
 # Retornar a webhook correta em produção:
 # https://chatbot.monitoramento.qzz.io/webhook
+
+
+
+# Endpoint de lembretes
+#https://xghkaptoxkjdypiruinm.supabase.co/functions/v1/whatsapp-daily-reminders
 
 
 
