@@ -556,7 +556,12 @@ async def debug_whatsapp_user_events():
 
 # Endpoint para atualizar os usuários na API
 # Lovable chama isso quando: plano vence / acesso é revogado / usuário é bloqueado
-# TODO = Ver com a Lovable quais são os status possíveis para deixar registrado aqui
+# Status possíveis:
+# ativo =         Conta ativa e operacional
+# trial =         Período de teste
+# inadimplente =  Pagamento em atraso
+# suspenso =      Conta temporariamente suspensa
+# encerrado =     Conta encerrada permanentemente
 @app.post("/atualizarUserStatus")
 async def lovable_user_status(payload: dict):
     phone = payload.get("phone")
@@ -703,8 +708,20 @@ async def webhook(request: Request):
     # Verifica na database da API (localhost) se o número existe e qual seu status (ativo, vencido...)
     usuario_db = await get_user_by_phone(phone_number)
     if usuario_db:
-        if usuario_db["status"] == "vencido":
+        if usuario_db["status"] == "inadimplente":
             await send_message(remoteJid, "⚠️ Sua assinatura venceu.\n\nRegularize no app:\nhttps://road-cost-tracker.lovable.app/")
+            return await status_ok()
+
+        elif usuario_db["status"] == "suspenso":
+            await send_message(remoteJid, "⛔ Seu acesso está suspenso.\n\nPor favor, regularize no app:\nhttps://road-cost-tracker.lovable.app/")
+            return await status_ok()
+
+        elif usuario_db["status"] == "encerrado":
+            await send_message(remoteJid, "⛔ Sua conta está encerrada.\n\nPor favor, regularize no app:\nhttps://road-cost-tracker.lovable.app/")
+            return await status_ok()
+
+        elif usuario_db["status"] == "trial":
+            await send_message(remoteJid, "⚠️ Sua assinatura está em período de teste e não é possível usar o assistente através do Whatsapp.\n\nAtualize seu plano no app:\nhttps://road-cost-tracker.lovable.app/")
             return await status_ok()
 
         elif usuario_db["status"] == "ativo":
